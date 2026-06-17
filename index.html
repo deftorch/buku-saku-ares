@@ -3,16 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="theme-color" content="#1B6B3A">
   <title>Buku Saku ARES — Web AR Edukasi Stunting</title>
 
-  <!-- ═══════════════════════════════════════════════════════════════════
+  <!-- ═══════════════════════════════════════════════════════════════════════
        STACK TEKNOLOGI (semua GRATIS):
        • A-Frame  v1.6.0  — scene 3D deklaratif (Three.js di baliknya)
        • MindAR   v1.2.5  — image tracking (pengganti AR Foundation)
        Tidak butuh Unity, tidak butuh native app, cukup buka di browser HP!
-       ═══════════════════════════════════════════════════════════════════ -->
-  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+       ═════════════════════════════════════════════════════════════════════
+  -->
+
+  <!-- PRELOAD targets.mind untuk mempercepat load -->
+  <link rel="preload" href="./targets.mind" as="fetch" crossorigin="anonymous">
+
+  <!-- Async load library untuk non-blocking rendering -->
+  <script async src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <script async src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <style>
     /* ── DESIGN TOKENS ───────────────────────────────────────────────── */
@@ -41,6 +49,27 @@
       color: var(--text);
       overflow: hidden;
       height: 100vh;
+      contain: layout style paint;
+    }
+
+    /* ── LOADING INDICATOR ─────────────────────────────────────────────── */
+    #loading-spinner {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 50px; height: 50px;
+      border: 4px solid rgba(255,255,255,0.2);
+      border-top-color: var(--green-mid);
+      border-radius: 50%;
+      animation: spinLoader 0.8s linear infinite;
+      z-index: 999;
+      display: flex;
+      opacity: 1;
+      transition: opacity 0.3s;
+    }
+    #loading-spinner.hidden { opacity: 0; pointer-events: none; }
+    @keyframes spinLoader {
+      to { transform: translate(-50%, -50%) rotate(360deg); }
     }
 
     /* ── SCANNING HINT ───────────────────────────────────────────────── */
@@ -62,6 +91,7 @@
       box-shadow: var(--shadow);
       z-index: 100;
       transition: opacity 0.4s;
+      will-change: opacity;
     }
     #scan-hint .scan-icon {
       width: 26px; height: 26px;
@@ -81,6 +111,7 @@
       display: none;
       pointer-events: none;
       z-index: 50;
+      contain: layout style;
     }
     .page-panel.active { display: flex; flex-direction: column; }
 
@@ -98,6 +129,7 @@
       pointer-events: none;
       white-space: nowrap;
       box-shadow: 0 4px 16px rgba(27,107,58,0.35);
+      will-change: transform;
     }
 
     /* ── CONTENT CARDS ───────────────────────────────────────────────── */
@@ -111,6 +143,7 @@
       pointer-events: all;
       max-height: 55vh;
       overflow-y: auto;
+      contain: layout style paint;
     }
     .card-title {
       font-size: 17px;
@@ -135,6 +168,7 @@
       padding: 11px 22px;
       transition: all 0.18s ease;
       font-family: inherit;
+      will-change: background-color;
     }
     .btn-green  { background: var(--green-mid); color: #fff; }
     .btn-green:hover  { background: var(--green-deep); }
@@ -186,6 +220,7 @@
       font-size: 22px;
       transition: all 0.2s;
       gap: 2px;
+      will-change: border-color, background-color;
     }
     .food-btn span { font-size: 9px; font-weight: 700; color: var(--text-soft); }
     .food-btn:hover, .food-btn.active {
@@ -227,6 +262,7 @@
       transition: all 0.2s;
       font-size: 13px;
       line-height: 1.5;
+      will-change: filter;
     }
     .plate-sec:hover { filter: brightness(0.95); }
     .plate-sec h4 { font-size: 14px; font-weight: 800; margin-bottom: 4px; }
@@ -264,6 +300,7 @@
       cursor: pointer;
       transition: background 0.18s;
       margin-bottom: 8px;
+      will-change: background;
     }
     .checklist-item:hover { background: #f4f4f4; }
     .check-box {
@@ -275,6 +312,7 @@
       font-size: 15px;
       transition: all 0.2s;
       margin-top: 1px;
+      will-change: background, border-color;
     }
     .checklist-item.done .check-box {
       background: var(--green-mid);
@@ -345,20 +383,29 @@
 
     /* ── MindAR default UI override ──────────────────────────────────── */
     .mindar-ui-overlay { z-index: 10 !important; }
+
+    /* ── A-Scene optimization ────────────────────────────────────────── */
+    a-scene {
+      contain: layout style paint !important;
+    }
   </style>
 </head>
 <body>
+
+<!-- Loading spinner -->
+<div id="loading-spinner"></div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════
      A-FRAME SCENE  —  Semua objek 3D di sini
      imageTargetSrc: file .mind yang di-compile dari gambar marker halaman buku
      Cara buat .mind: https://hiukim.github.io/mind-ar-js-doc/tools/compile
                       Upload 5 gambar marker → Download targets.mind
-     ═══════════════════════════════════════════════════════════════════════ -->
+     ═════════════════════════════════════════════════════════════════════
+-->
 <a-scene
   mindar-image="imageTargetSrc: ./targets.mind; autoStart: true; filterMinCF: 0.001; filterBeta: 10;"
   color-space="sRGB"
-  renderer="colorManagement: true; antialias: true;"
+  renderer="colorManagement: true; antialias: true; precision: mediump;"
   vr-mode-ui="enabled: false"
   device-orientation-permission-ui="enabled: false"
   embedded
@@ -377,10 +424,11 @@
     </a-entity>
   </a-camera>
 
-  <!-- ──────────────────────────────────────────────────────────────────
+  <!-- ──────────────────────────────────────────────────────────────────────
        HALAMAN 1  —  Kenali Stunting
        targetIndex: 0  (urutan gambar pertama saat compile .mind)
-       ────────────────────────────────────────────────────────────────── -->
+       ──────────────────────────────────────────────────────────────────────
+  -->
   <a-entity mindar-image-target="targetIndex: 0" id="target-0">
     <!-- Anak optimal (kiri) - placeholder kapsul hijau -->
     <a-entity position="-0.08 0.12 0" scale="0.06 0.10 0.06"
@@ -415,10 +463,11 @@
     </a-entity>
   </a-entity>
 
-  <!-- ──────────────────────────────────────────────────────────────────
+  <!-- ──────────────────────────────────────────────────────────────────────
        HALAMAN 2  —  Protein Hewani
        5 objek makanan tersusun horizontal
-       ────────────────────────────────────────────────────────────────── -->
+       ──────────────────────────────────────────────────────────────────────
+  -->
   <a-entity mindar-image-target="targetIndex: 1" id="target-1">
     <!-- 5 bola makanan dengan warna berbeda, posisi horizontal -->
     <a-entity position="-0.12 0.06 0" scale="0.05 0.05 0.05"
@@ -458,10 +507,11 @@
     </a-entity>
   </a-entity>
 
-  <!-- ──────────────────────────────────────────────────────────────────
+  <!-- ──────────────────────────────────────────────────────────────────────
        HALAMAN 3  —  Isi Piring
        Piring dengan 4 bagian tappable
-       ────────────────────────────────────────────────────────────────── -->
+       ──────────────────────────────────────────────────────────────────────
+  -->
   <a-entity mindar-image-target="targetIndex: 2" id="target-2">
     <!-- Piring (lingkaran putih) -->
     <a-entity position="0 0.005 0" scale="0.13 0.01 0.13"
@@ -491,9 +541,10 @@
     </a-entity>
   </a-entity>
 
-  <!-- ──────────────────────────────────────────────────────────────────
+  <!-- ──────────────────────────────────────────────────────────────────────
        HALAMAN 4  —  5 Langkah (murni UI overlay, tanpa 3D model)
-       ────────────────────────────────────────────────────────────────── -->
+       ──────────────────────────────────────────────────────────────────────
+  -->
   <a-entity mindar-image-target="targetIndex: 3" id="target-3">
     <!-- Ikon dekoratif kecil di atas marker -->
     <a-entity position="0 0.05 0" scale="0.06 0.06 0.06"
@@ -503,9 +554,10 @@
     </a-entity>
   </a-entity>
 
-  <!-- ──────────────────────────────────────────────────────────────────
+  <!-- ──────────────────────────────────────────────────────────────────────
        HALAMAN 5  —  Kuis Mitos/Fakta (murni UI overlay)
-       ────────────────────────────────────────────────────────────────── -->
+       ──────────────────────────────────────────────────────────────────────
+  -->
   <a-entity mindar-image-target="targetIndex: 4" id="target-4">
     <!-- Ikon dekoratif tanda tanya -->
     <a-entity position="0 0.05 0" scale="0.065 0.065 0.065"
@@ -519,7 +571,8 @@
 
 <!-- ═══════════════════════════════════════════════════════════════════════
      HTML UI OVERLAY  —  Panel UI muncul sesuai halaman yang discan
-     ═══════════════════════════════════════════════════════════════════════ -->
+     ═════════════════════════════════════════════════════════════════════
+-->
 
 <!-- ── Scan hint: tampil saat belum ada marker ───────────────────────── -->
 <div id="scan-hint">
@@ -665,11 +718,12 @@
 </div>
 
 
-<!-- ═══════════════════════════════════════════════════════════════════════
+<!-- ═════════════════════════════════════════════════════════════════════════
      JAVASCRIPT
-     ═══════════════════════════════════════════════════════════════════════ -->
+     ═════════════════════════════════════════════════════════════════════════
+-->
 <script>
-// ── DATA ────────────────────────────────────────────────────────────────
+// ── DATA ─────────────────────────────────────────────────────────────────
 
 const FOODS = [
   {
@@ -769,7 +823,7 @@ const QUIZ = [
   }
 ];
 
-// ── STATE ────────────────────────────────────────────────────────────────
+// ── STATE ─────────────────────────────────────────────────────────────
 
 let activePage = -1;
 let compareShown = false;
@@ -777,7 +831,7 @@ let quizIndex = 0;
 let quizScore = 0;
 let quizAnswered = false;
 
-// ── INIT CHECKLIST ───────────────────────────────────────────────────────
+// ── INIT CHECKLIST ─────────────────────────────────────────────────────
 
 function buildChecklist() {
   const container = document.getElementById('checklist-container');
@@ -804,7 +858,7 @@ function toggleCheck(i) {
   mark.textContent = el.classList.contains('done') ? '✓' : '';
 }
 
-// ── HALAMAN 1 ────────────────────────────────────────────────────────────
+// ── HALAMAN 1 ──────────────────────────────────────────────────────────
 
 function toggleCompare() {
   compareShown = !compareShown;
@@ -814,7 +868,7 @@ function toggleCompare() {
   btn.textContent = compareShown ? '🔼 Sembunyikan' : '🔍 Bandingkan';
 }
 
-// ── HALAMAN 2 ────────────────────────────────────────────────────────────
+// ── HALAMAN 2 ──────────────────────────────────────────────────────────
 
 function showFood(index) {
   // Highlight tombol
@@ -830,7 +884,7 @@ function showFood(index) {
   det.style.display = 'block';
 }
 
-// ── HALAMAN 3 ────────────────────────────────────────────────────────────
+// ── HALAMAN 3 ──────────────────────────────────────────────────────────
 
 function showSection(index) {
   const s = PLATE_SECTIONS[index];
@@ -844,7 +898,7 @@ function closePlatePopup() {
   document.getElementById('popup-plate').classList.remove('open');
 }
 
-// ── HALAMAN 5: KUIS ──────────────────────────────────────────────────────
+// ── HALAMAN 5: KUIS ────────────────────────────────────────────────────
 
 function loadQuestion() {
   if (quizIndex >= QUIZ.length) { showQuizFinished(); return; }
@@ -902,7 +956,7 @@ function restartQuiz() {
   loadQuestion();
 }
 
-// ── PANEL SWITCHER ───────────────────────────────────────────────────────
+// ── PANEL SWITCHER ────────────────────────────────────────────────────
 
 function showPanel(index) {
   if (activePage === index) return;
@@ -914,7 +968,7 @@ function showPanel(index) {
   });
 }
 
-// ── DRAG-TO-ROTATE COMPONENT ─────────────────────────────────────────────
+// ── DRAG-TO-ROTATE COMPONENT ──────────────────────────────────────────
 
 AFRAME.registerComponent('drag-rotate-component', {
   init: function () {
@@ -944,7 +998,7 @@ AFRAME.registerComponent('drag-rotate-component', {
   }
 });
 
-// ── 3D CLICK → UI ACTION ─────────────────────────────────────────────────
+// ── 3D CLICK → UI ACTION ──────────────────────────────────────────────
 
 AFRAME.registerComponent('click-handler', {
   init: function () {
@@ -960,7 +1014,7 @@ AFRAME.registerComponent('click-handler', {
   }
 });
 
-// ── ATTACH EVENTS AFTER SCENE LOADS ──────────────────────────────────────
+// ── ATTACH EVENTS AFTER SCENE LOADS ────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -969,6 +1023,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const scene = document.querySelector('a-scene');
   scene.addEventListener('loaded', () => {
+
+    // Hide loading spinner ketika scene sudah loaded
+    const spinner = document.getElementById('loading-spinner');
+    if (spinner) {
+      spinner.classList.add('hidden');
+    }
 
     // Tambahkan click-handler ke semua clickable3d
     document.querySelectorAll('.clickable3d').forEach(el => {
@@ -995,47 +1055,10 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 
 <!--
-═══════════════════════════════════════════════════════════════════════
+═════════════════════════════════════════════════════════════════════════
 CARA PAKAI / QUICK START
-═══════════════════════════════════════════════════════════════════════
-
-LANGKAH 1 — Buat file targets.mind dari marker gambar buku kamu:
-  1. Buka https://hiukim.github.io/mind-ar-js-doc/tools/compile
-  2. Upload 5 gambar marker (halaman1.jpg ... halaman5.jpg)
-     URUTAN HARUS SAMA dengan targetIndex di kode ini (0=Hal.1, dst.)
-  3. Download → simpan sebagai "targets.mind" di folder yang sama
-     dengan file HTML ini.
-
-LANGKAH 2 — Jalankan via server lokal (wajib, tidak bisa file://):
-  npx serve .
-  atau: python -m http.server 8080
-  Buka http://localhost:8080/BukuSakuARES_Web.html di HP/browser.
-
-LANGKAH 3 — Buka di HP:
-  Sambungkan ke WiFi yang sama, buka IP local di HP.
-  Izinkan akses kamera → arahkan ke halaman buku.
-
-KUSTOMISASI:
-  • Ganti data konten (teks, emoji): edit objek FOODS, PLATE_SECTIONS,
-    CHECKLIST, QUIZ di bagian "DATA" JavaScript di atas.
-  • Ganti placeholder 3D dengan model glTF nyata:
-    Contoh: <a-gltf-model src="./models/telur.glb" ...>
-  • Tambah audio: <a-sound src="./audio/info.mp3" autoplay="false">
-  • Warna/font: ubah CSS variables di :root { ... }
-
-KETERBATASAN vs Unity:
-  ✅ Image tracking → sama baiknya dengan MindAR
-  ✅ Multi-marker   → didukung penuh
-  ✅ iOS + Android  → bekerja di browser tanpa install app
-  ⚠️  Model 3D detail → butuh file .glb (bisa export dari Blender gratis)
-  ⚠️  World tracking (SLAM) → gunakan 8thwall open source jika butuh
-
-STACK GRATIS YANG DIGUNAKAN:
-  • MindAR.js v1.2.5 — MIT license
-  • A-Frame v1.6.0  — MIT license
-  • Three.js (via A-Frame)
-  • Tidak ada backend, tidak ada subscription, tidak ada install
-═══════════════════════════════════════════════════════════════════════
+═════════════════════════════════════════════════════════════════════════
+[...]
 -->
 </body>
 </html>
